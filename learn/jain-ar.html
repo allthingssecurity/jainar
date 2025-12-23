@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="hi">
+  <head>
+    <meta charset="utf-8" />
+    <title>जैन दर्शन AR: इशारा‑आधारित सीख</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #05070f;
+        --accent: #22d3ee;
+        --accent2: #f43f5e;
+        --text: #e5e7eb;
+      }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; font-family: "Inter", system-ui, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      #cameraFeed { position: fixed; inset: 0; object-fit: cover; z-index: 1; opacity: 0.8; transform: scaleX(-1); }
+      #landmarks { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+      #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at top, rgba(34,211,238,0.2), transparent 60%), #05070f; z-index: 10; text-align: center; }
+      #overlay .card { background: rgba(7,10,18,0.9); border: 1px solid rgba(34,211,238,0.4); padding: 24px 28px; border-radius: 20px; box-shadow: 0 0 40px rgba(34,211,238,0.2); max-width: 460px; }
+      #overlay h1 { margin: 0 0 10px; font-size: 22px; letter-spacing: 0.04em; }
+      #overlay p { margin: 6px 0; opacity: 0.9; font-size: 14px; }
+      #progress { margin-top: 12px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+      #bar { height: 100%; width: 0%; background: linear-gradient(90deg, #22d3ee, #38bdf8); transition: width 0.4s ease; }
+      #statusLine, #percentLine, #debugLine { margin-top: 8px; font-size: 12px; opacity: 0.8; }
+      #cameraHint { margin-top: 10px; font-size: 12px; opacity: 0.7; }
+      #retryBtn { margin-top: 12px; background: #22d3ee; color: #0b1120; border: none; padding: 8px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+      #preview { margin-top: 12px; width: 120px; height: 90px; border-radius: 8px; border: 1px solid rgba(34,211,238,0.4); object-fit: cover; display: none; }
+      #hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+      #hud .box { background: rgba(2,6,23,0.7); border: 1px solid rgba(34,211,238,0.3); padding: 8px 12px; border-radius: 12px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
+      #levelBox { margin-left: 8px; }
+      #centerText { position: fixed; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-size: 18px; letter-spacing: 0.25em; opacity: 0.7; pointer-events: none; }
+      #hitText { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 26px; font-weight: 700; letter-spacing: 0.2em; opacity: 0; transition: opacity 0.2s ease; pointer-events: none; }
+      #hitText.hit { color: #22d3ee; opacity: 1; }
+      #hitText.miss { color: #f43f5e; opacity: 1; }
+      #help { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(2,6,23,0.7); border: 1px solid rgba(34,211,238,0.3); padding: 10px 14px; border-radius: 12px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; z-index: 6; pointer-events: none; }
+      #guide { position: fixed; left: 16px; bottom: 80px; width: 280px; z-index: 7; background: rgba(2,6,23,0.9); border: 1px solid rgba(34,211,238,0.4); border-radius: 16px; padding: 12px 14px; box-shadow: 0 0 20px rgba(34,211,238,0.2); font-size: 12px; }
+      #guide h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: #22d3ee; }
+      #guide p { margin: 4px 0; opacity: 0.9; }
+      #learnCard { position: fixed; right: 16px; top: 80px; width: 340px; z-index: 7; background: rgba(2,6,23,0.9); border: 1px solid rgba(34,211,238,0.4); border-radius: 16px; padding: 14px 16px; box-shadow: 0 0 30px rgba(34,211,238,0.2); opacity: 0; transform: translateY(10px); transition: all 0.3s ease; pointer-events: none; }
+      #learnCard.show { opacity: 1; transform: translateY(0); }
+      #learnTitle { font-size: 14px; letter-spacing: 0.2em; text-transform: uppercase; color: #22d3ee; }
+      #learnBody { margin-top: 6px; font-size: 13px; line-height: 1.4; color: #e5e7eb; white-space: pre-wrap; }
+      #learnTakeaway { margin-top: 8px; font-size: 12px; color: #cbd5f5; }
+      #levelModal { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: rgba(2,6,23,0.6); }
+      #levelModal.show { display: flex; }
+      #levelCard { background: rgba(7,10,18,0.96); border: 1px solid rgba(34,211,238,0.4); border-radius: 14px; padding: 16px 18px; width: 360px; text-align: center; box-shadow: 0 0 40px rgba(34,211,238,0.2); }
+      #levelCard h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: 0.2em; text-transform: uppercase; color: #22d3ee; }
+      #levelCard p { margin: 6px 0; font-size: 13px; opacity: 0.9; }
+      #nextBtn { margin-top: 10px; background: #22d3ee; color: #0b1120; border: none; padding: 8px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+      #quizOptions { margin-top: 12px; display: grid; gap: 8px; }
+      .quizBtn { background: rgba(34,211,238,0.15); color: #e5e7eb; border: 1px solid rgba(34,211,238,0.4); padding: 8px 10px; border-radius: 10px; cursor: pointer; font-size: 12px; }
+      .quizBtn.correct { background: rgba(34,197,94,0.2); border-color: rgba(34,197,94,0.6); }
+      .quizBtn.wrong { background: rgba(244,63,94,0.2); border-color: rgba(244,63,94,0.6); }
+    </style>
+  </head>
+  <body>
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <video id="video" autoplay playsinline muted style="display:none"></video>
+    <canvas id="landmarks"></canvas>
+    <div id="app"></div>
+    <div id="overlay">
+      <div class="card">
+        <h1>जैन दर्शन AR: इशारा‑आधारित सीख</h1>
+        <p id="statusText">मॉडल लोड हो रहे हैं… कृपया प्रतीक्षा करें।</p>
+        <div id="progress"><div id="bar"></div></div>
+        <div id="percentLine">0%</div>
+        <div id="statusLine">चरण 1/3: लोकल AI फ़ाइलें लोड हो रही हैं</div>
+        <div id="debugLine"></div>
+        <p>इशारा: सिर्फ तर्जनी (index finger) उठाकर कार्ड पर ठहरें।</p>
+        <p>हाथ कैमरा फ़्रेम में रखें।</p>
+        <div id="cameraHint">सुझाव: कैमरा अनुमति दें।</div>
+        <button id="retryBtn">पुनः प्रयास</button>
+        <video id="preview" autoplay playsinline muted></video>
+      </div>
+    </div>
+    <div id="hud">
+      <div style="display:flex; gap:8px;">
+        <div class="box" id="score">स्कोर: 0</div>
+        <div class="box" id="levelBox">स्तर 1/5</div>
+      </div>
+      <div class="box" id="streak">श्रृंखला: x1</div>
+    </div>
+    <div id="centerText">अभ्यास • अनुशासन • मोक्ष</div>
+    <div id="hitText">सफल</div>
+    <div id="help">तर्जनी से कार्ड पर रुकें — ज्ञान कार्ड खुलेगा।</div>
+    <div id="guide">
+      <h3>इशारा निर्देश</h3>
+      <p>हथेली कैमरा की ओर रखें।</p>
+      <p>सिर्फ तर्जनी ऊपर रखें (बाकी मुड़ी रहें)।</p>
+      <p>कार्ड के ऊपर 1–2 सेकंड ठहरें।</p>
+    </div>
+    <div id="learnCard">
+      <div id="learnTitle">विषय</div>
+      <div id="learnBody">कार्ड पर ठहरने से विवरण खुलेगा।</div>
+      <div id="learnTakeaway"></div>
+    </div>
+    <div id="levelModal">
+      <div id="levelCard">
+        <h2 id="levelTitle">स्तर पूरा</h2>
+        <p id="levelText">अगले अध्याय को खोलने के लिए छोटा क्विज़ हल करें।</p>
+        <div id="quizOptions"></div>
+        <button id="nextBtn">अगला अध्याय</button>
+      </div>
+    </div>
+
+    <script src="vendor/three.min.js"></script>
+    <script src="vendor/hands.js"></script>
+    <script src="vendor/camera_utils.js"></script>
+    <script>
+      // सीख कार्ड (हिंदी)
+      window.JAIN_CARDS = {
+        "अंग आगम क्या हैं": { body: "जैन दर्शन के सबसे प्राचीन और प्रामाणिक उपदेश।\nमहावीर के प्रवचनों की मूल परत।\n12 अंग माने गए; श्वेतांबर परंपरा में 11 शेष, 12वाँ (दृष्टिवाद) लुप्त।\nये व्याख्या नहीं — सीधे अस्तित्व, बंधन और मुक्ति पर संवाद हैं।", takeaway: "अंग = मूल उपदेश, अनुशासन की नींव।" },
+        "आचारांग सूत्र": { body: "उच्चतम अहिंसा, अपरिग्रह, सजगता।\nहिंसा का निर्धारण सिर्फ परिणाम से नहीं, इरादा और लापरवाही से भी।\nअवधानहीनता भी कर्म बंधन लाती है।", takeaway: "नीति = सतत सजगता; मुक्ति का आचरण।" },
+        "सूत्रकृतांग": { body: "विवाद और बहु‑दृष्टि का आरंभिक रूप।\nअभिधारणात्मक अतिरेकी मतों की आलोचना।\n‘एक दृष्टि से पूर्ण सत्य’ असंगत — सापेक्ष और शर्तबद्ध सत्य ही संगत।", takeaway: "अनैकांत: सत्य बहु‑कोणीय है।" },
+        "दृष्टिवाद (लुप्त)": { body: "तर्क, कर्म सिद्धांत और प्रमानविज्ञान पर उन्नत सामग्री।\nयद्यपि लुप्त, परवर्ती दर्शन का बड़ा भाग इसकी पुनर्रचना है।", takeaway: "लुप्त, फिर भी परवर्ती तंत्र का स्रोत।" },
+        "दार्शनिक रुख": { body: "कर्म वास्तविक द्रव्य कारण है, प्रतीक नहीं।\nईश्वर‑निर्माता का निषेध।\nनैतिक कठोरता और मनोवैज्ञानिक विश्लेषण का समन्वय।", takeaway: "अस्तित्व की अभियांत्रिकी, न कि कल्पना।" },
+
+        "भगवती सूत्र": { body: "सबसे विशाल प्रश्न‑उत्तर ग्रंथ।\nजीव‑अजीव, काल, आकाश, कर्म भेद, प्रयत्न बनाम नियतत्व।\nज्ञान दृष्टिकोण‑निर्भर, पर नियमबद्ध।", takeaway: "लागू अनैकांत — परिप्रेक्ष्य + नियम।" },
+        "जम्बूद्वीप प्रज्ञप्ति": { body: "मध्यलोक, महाद्वीप‑समुद्र, मानव क्षेत्र, चक्रात्मक कालक्रम।\nमुक्ति दुर्लभ है — समय और भूगोल का सापेक्ष संदर्भ।", takeaway: "ब्रह्मांड मानचित्र: मुक्ति का संदर्भ।" },
+        "सूर्य/चन्द्र प्रज्ञप्ति": { body: "सौर‑चन्द्र गति, कालचक्र, पंचांग।\nकाल वास्तविक है; कर्म का प्रादुर्भाव समय‑संरचना में होता है।", takeaway: "काल = वास्तविक; कर्म unfold नियम से।" },
+        "कर्म‑यांत्रिकी": { body: "कर्म द्रव्यात्मक और यांत्रिक — दंडदाता नहीं।\nकारणों से परिणाम अनिवार्यतः उपजते हैं।", takeaway: "न्याय नहीं, नियत causal यंत्र।" },
+
+        "दशाश्रुतस्कंध": { body: "दोषों के प्रकार‑गौरव और उपयुक्त प्रायश्चित्त।\nभाव (आंतरिक) बनाम द्रव्य (बाह्य) — मनोभाव का भार।", takeaway: "दंड नहीं, दुरुस्ती; ग्रेडेड नीति।" },
+        "वृहद्कल्प सूत्र": { body: "ऋतु, स्थान, प्राणी‑घनत्व अनुसार आचरण।\nउदाहरण: वर्षा‑ऋतु में सूक्ष्म प्राणियों की रक्षा हेतु नियमों में बदलाव।", takeaway: "संदर्भ‑संगत नैतिकता।" },
+        "व्यवहार सूत्र": { body: "संघ के भीतर न्याय‑प्रक्रिया: आरोप, परीक्षा, स्वीकारोक्ति, सामूहिक निर्णय।\nअधिकार नहीं, प्रक्रिया से सत्य।", takeaway: "प्रक्रिया‑निष्ठ सत्यापन।" },
+        "निशीथ सूत्र": { body: "कठोरतम प्रायश्चित्त, कालावधि, तीव्रता, बहिष्कार की दशाएँ।\nतप = कर्म‑द्रव्य पर उष्मा—जैसा प्रभाव।", takeaway: "प्रायश्चित्त = कर्म‑शुद्धि का औज़ार।" },
+
+        "उत्तराध्ययन": { body: "ज्ञान‑अनुशासन का समाकलन।\nकर्म‑बंधन/शेध, गृहस्थ‑संयमी भेद, नश्वरता, अनित्यता।\nज्ञान बिना अनुशासन अकारथ; अनुशासन बिना ज्ञान अंध।", takeaway: "जीना = जानना × साधना।" },
+        "दशवैकालिक": { body: "संक्षिप्त दैनिक उपदेश: पंचव्रत, वाणी‑संयम, गमन‑सावधानी, आहार‑मर्यादा, अपरिग्रह।\nहिंसा की जड़ = असावधानी; असावधानी की जड़ = आसक्ति।", takeaway: "दैनिक अनुशासन = दार्शनिक अभ्यास।" },
+        "आवश्यक": { body: "छः आवश्यक क्रियाएँ: समायिक, स्तुति, प्रतिक्रमण, आलोचना, कायोत्सर्ग, प्रार्थना/दर्शनों में स्थिरता।\nआवृत्ति = ध्यान इंजीनियरिंग।", takeaway: "विधि = ध्यान‑पुनर्संतुलन।" },
+
+        "प्रकिर्णक: चौःशरण": { body: "तीर्थंकर, सिद्ध, धर्म, संघ में शरण को आत्म‑विकृतियों से संरेखण मानना।\nअनुग्रह नहीं — यथार्थ के साथ समंजन।", takeaway: "शरण = कारण‑संगत संरेखण।" },
+        "आतुर प्रत्याख्यान": { body: "रोग/मरणावस्था में मनो‑अवस्था का महत्व।\nअंतिम भाव के अनुसार कर्म‑आवेश घटता‑बढ़ता है।", takeaway: "मरण = संज्ञानात्मक घटना।" },
+        "भक्त परिज्ञा": { body: "आहार, उपभोग, अप्रत्यक्ष हिंसा — न्यूनता, सावधानी, संयम।\nनियम‑पालन से आगे सतत न्यून हिंसा।", takeaway: "न्यूनतम‑हिंसा का अनुकूलन।" }
+      };
+
+      // DOM refs
+      const scoreBox = document.getElementById('score');
+      const levelBox = document.getElementById('levelBox');
+      const streakBox = document.getElementById('streak');
+      const centerText = document.getElementById('centerText');
+      const hitText = document.getElementById('hitText');
+      const overlay = document.getElementById('overlay');
+      const statusText = document.getElementById('statusText');
+      const statusLine = document.getElementById('statusLine');
+      const percentLine = document.getElementById('percentLine');
+      const debugLine = document.getElementById('debugLine');
+      const bar = document.getElementById('bar');
+      const preview = document.getElementById('preview');
+      const retryBtn = document.getElementById('retryBtn');
+      const videoElement = document.getElementById('video');
+      const cameraFeed = document.getElementById('cameraFeed');
+      const landmarksCanvas = document.getElementById('landmarks');
+      const landmarksCtx = landmarksCanvas.getContext('2d');
+      const learnCard = document.getElementById('learnCard');
+      const learnTitle = document.getElementById('learnTitle');
+      const learnBody = document.getElementById('learnBody');
+      const learnTakeaway = document.getElementById('learnTakeaway');
+      const levelModal = document.getElementById('levelModal');
+      const levelTitle = document.getElementById('levelTitle');
+      const levelText = document.getElementById('levelText');
+      const quizOptions = document.getElementById('quizOptions');
+      const nextBtn = document.getElementById('nextBtn');
+
+      if (!window.THREE || !window.Hands || !window.Camera) {
+        statusText.textContent = "AR पुस्तकालय लोड नहीं हुईं";
+        statusLine.textContent = "लोकल vendor फ़ाइलें जाँचें।";
+        debugLine.textContent = "vendor/mediapipe और three.min.js आवश्यक";
+        retryBtn.addEventListener('click', () => location.reload());
+      } else {
+        // स्तर (5)
+        const levels = [
+          {
+            name: "अंग आगम",
+            concepts: ["अंग आगम क्या हैं", "आचारांग सूत्र", "सूत्रकृतांग", "दृष्टिवाद (लुप्त)", "दार्शनिक रुख"],
+            speed: 0.006,
+            quiz: [
+              { q: "अंग आगम क्या हैं?", correct: "मूल उपदेश", options: ["मूल उपदेश", "अनुवाद", "कथा"] },
+              { q: "आचारांग सूत्र का केंद्र?", correct: "अहिंसा/सजगता", options: ["अहिंसा/सजगता", "पुराण", "भोग"] }
+            ]
+          },
+          {
+            name: "उपांग",
+            concepts: ["भगवती सूत्र", "जम्बूद्वीप प्रज्ञप्ति", "सूर्य/चन्द्र प्रज्ञप्ति", "कर्म‑यांत्रिकी"],
+            speed: 0.0065,
+            quiz: [
+              { q: "भगवती सूत्र किस रूप में है?", correct: "प्रश्न‑उत्तर", options: ["प्रश्न‑उत्तर", "काव्य", "नाटक"] },
+              { q: "काल जैन दर्शन में?", correct: "वास्तविक", options: ["वास्तविक", "माया", "अनावश्यक"] }
+            ]
+          },
+          {
+            name: "चेद सूत्र",
+            concepts: ["दशाश्रुतस्कंध", "वृहद्कल्प सूत्र", "व्यवहार सूत्र", "निशीथ सूत्र"],
+            speed: 0.007,
+            quiz: [
+              { q: "दंड का भाव?", correct: "दुरुस्ती/शुद्धि", options: ["दुरुस्ती/शुद्धि", "प्रतिशोध", "ईश्वरीय"] },
+              { q: "व्यवहार सूत्र का जोर?", correct: "प्रक्रिया", options: ["प्रक्रिया", "शक्ति", "दंड"] }
+            ]
+          },
+          {
+            name: "मूल सूत्र",
+            concepts: ["उत्तराध्ययन", "दशवैकालिक", "आवश्यक"],
+            speed: 0.0075,
+            quiz: [
+              { q: "समायिक/प्रतिक्रमण किसमें?", correct: "आवश्यक", options: ["आवश्यक", "जम्बूद्वीप", "सूत्रकृतांग"] },
+              { q: "उपदेश + अभ्यास का सूत्र?", correct: "उत्तराध्ययन", options: ["उत्तराध्ययन", "निशीथ", "वृहद्कल्प"] }
+            ]
+          },
+          {
+            name: "प्रकिर्णक",
+            concepts: ["प्रकिर्णक: चौःशरण", "आतुर प्रत्याख्यान", "भक्त परिज्ञा"],
+            speed: 0.008,
+            quiz: [
+              { q: "शरण का अर्थ?", correct: "संरेखण", options: ["संरेखण", "अनुग्रह", "घोषणा"] },
+              { q: "भक्त परिज्ञा का केंद्र?", correct: "न्यून हिंसा", options: ["न्यून हिंसा", "उपासना", "दैववाद"] }
+            ]
+          }
+        ];
+
+        let score = 0;
+        let streak = 1;
+        let lastDetectionTime = 0;
+        let levelIndex = 0;
+        let currentConceptIndex = 0;
+        let waitingForNext = false;
+        let hoverTargetId = null;
+        let hoverStart = 0;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+        camera.position.z = 6;
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(innerWidth, innerHeight);
+        document.getElementById('app').appendChild(renderer.domElement);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(5, 5, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x88aaff, 0.6));
+
+        const crosshair = new THREE.Mesh(
+          new THREE.RingGeometry(0.18, 0.24, 32),
+          new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+        );
+        scene.add(crosshair);
+
+        const laser = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -3)
+          ]),
+          new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6 })
+        );
+        scene.add(laser);
+
+        const discs = [];
+        const particles = [];
+        const discGeo = new THREE.CircleGeometry(0.8, 32);
+
+        function updateLevelUI() {
+          levelBox.textContent = `स्तर ${levelIndex + 1}/${levels.length}`;
+          centerText.textContent = levels[levelIndex].name;
+        }
+
+        function showLevelComplete() {
+          levelTitle.textContent = "स्तर पूरा";
+          levelText.textContent = "अगले अध्याय हेतु क्विज़ हल करें।";
+          startQuiz();
+          levelModal.classList.add('show');
+        }
+
+        function advanceLevel() {
+          if (levelIndex < levels.length - 1) {
+            levelIndex += 1;
+            currentConceptIndex = 0;
+            updateLevelUI();
+            waitingForNext = false;
+            levelModal.classList.remove('show');
+            ensureDiscs();
+          } else {
+            levelTitle.textContent = "यात्रा पूर्ण";
+            levelText.textContent = "आपने सभी अध्याय पकड़ लिए हैं।";
+          }
+        }
+
+        let cardHoverTicks = 0;
+        function showLearn(label) {
+          learnTitle.textContent = label;
+          const obj = (window.JAIN_CARDS && window.JAIN_CARDS[label]) || null;
+          if (obj && typeof obj === 'object') {
+            learnBody.textContent = obj.body || String(label);
+            learnTakeaway.textContent = obj.takeaway ? `सार: ${obj.takeaway}` : '';
+          } else {
+            learnBody.textContent = String(label);
+            learnTakeaway.textContent = '';
+          }
+          learnCard.classList.add('show');
+          cardHoverTicks = 0; // dwell needed to dismiss
+        }
+
+        let quizIndex = 0;
+        function startQuiz() {
+          quizIndex = 0;
+          nextBtn.disabled = true;
+          renderQuizQuestion();
+        }
+        function renderQuizQuestion() {
+          quizOptions.innerHTML = "";
+          const questions = levels[levelIndex].quiz;
+          const current = questions[quizIndex];
+          levelText.textContent = `${quizIndex + 1}/${questions.length}: ${current.q}`;
+          current.options.forEach(opt => {
+            const btn = document.createElement("button");
+            btn.className = "quizBtn";
+            btn.textContent = opt;
+            btn.addEventListener("click", () => {
+              if (opt === current.correct) {
+                btn.classList.add("correct");
+                if (quizIndex < questions.length - 1) {
+                  quizIndex += 1;
+                  setTimeout(renderQuizQuestion, 400);
+                } else {
+                  levelText.textContent = "क्विज़ पूर्ण — अगला अध्याय खोलें।";
+                  nextBtn.disabled = false;
+                }
+              } else {
+                btn.classList.add("wrong");
+                levelText.textContent = "सही नहीं — पुनः प्रयास करें।";
+              }
+            });
+            quizOptions.appendChild(btn);
+          });
+        }
+
+        function spawnBurst(position) {
+          for (let i = 0; i < 16; i++) {
+            const geo = new THREE.CircleGeometry(0.06, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.9 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(position);
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.02 + Math.random() * 0.03;
+            particles.push({ mesh, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 35 });
+            scene.add(mesh);
+          }
+        }
+
+        function createTarget(label, role) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256; canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#0b1120'; ctx.fillRect(0,0,256,256);
+          ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 6; ctx.strokeRect(16,16,224,224);
+          ctx.fillStyle = '#22d3ee'; ctx.fillRect(16, 180, 224, 60);
+          ctx.fillStyle = '#0b1120'; ctx.font = '18px sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(label, 128, 214);
+          ctx.fillStyle = '#e5e7eb'; ctx.font = '20px sans-serif'; ctx.fillText(role, 128, 90);
+          // icon
+          ctx.fillStyle = '#e5e7eb'; ctx.beginPath(); ctx.arc(128, 130, 26, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#0b1120'; ctx.fillRect(96, 160, 64, 40);
+
+          const texture = new THREE.CanvasTexture(canvas);
+          const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+          const mesh = new THREE.Mesh(discGeo, mat);
+          const edge = Math.floor(Math.random() * 4);
+          const dist = 6.5; let x = 0, y = 0;
+          if (edge === 0) { x = -dist; y = (Math.random()-0.5)*4; }
+          if (edge === 1) { x = dist; y = (Math.random()-0.5)*4; }
+          if (edge === 2) { y = dist; x = (Math.random()-0.5)*4; }
+          if (edge === 3) { y = -dist; x = (Math.random()-0.5)*4; }
+          mesh.position.set(x, y, -2);
+          const dir = new THREE.Vector3(-x, -y, 0).normalize();
+          const speed = levels[levelIndex].speed;
+          mesh.userData = { label, role, velocity: dir.multiplyScalar(speed) };
+          scene.add(mesh);
+          return mesh;
+        }
+
+        function ensureDiscs() {
+          if (waitingForNext) return;
+          const pool = levels[levelIndex].concepts;
+          if (discs.length === 0 && currentConceptIndex < pool.length) {
+            const label = pool[currentConceptIndex];
+            const role = levels[levelIndex].name;
+            discs.push(createTarget(label, role));
+          }
+        }
+
+        function hitVFX(isHit) {
+          hitText.textContent = isHit ? "सफल" : "चूक";
+          hitText.className = isHit ? "hit" : "miss";
+          setTimeout(() => hitText.className = "", 250);
+        }
+
+        function playTone(freq, dur=0.1, vol=0.05) {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine'; osc.frequency.value = freq; gain.gain.value = vol;
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + dur);
+          } catch {}
+        }
+
+        function updateParticles() {
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i]; p.mesh.position.x += p.vx; p.mesh.position.y += p.vy; p.life -= 1;
+            p.mesh.material.opacity = Math.max(0, p.life / 35);
+            if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+          }
+        }
+
+        function updateDiscs() {
+          const now = performance.now();
+          for (let i = discs.length - 1; i >= 0; i--) {
+            const d = discs[i]; d.position.add(d.userData.velocity);
+            if (Math.abs(d.position.x) > 8 || Math.abs(d.position.y) > 6) { scene.remove(d); discs.splice(i, 1); ensureDiscs(); }
+          }
+        }
+
+        function magnetAim(x, y) {
+          crosshair.position.set(x, y, 0);
+          const p1 = new THREE.Vector3(x, y, 0);
+          const p2 = new THREE.Vector3(x, y, -3);
+          laser.geometry.setFromPoints([p1, p2]);
+        }
+
+        function collectIfHovering(screenX, screenY) {
+          let target = null; let best = 1e9;
+          const hitDist = 100;
+          for (const d of discs) {
+            const v = d.position.clone().project(camera);
+            const dx = (v.x * 0.5 + 0.5) * innerWidth - screenX;
+            const dy = (1 - (v.y * 0.5 + 0.5)) * innerHeight - screenY;
+            const dist = Math.hypot(dx, dy);
+            if (dist < best) { best = dist; target = d; }
+          }
+          if (target && best < hitDist) {
+            if (hoverTargetId !== target.uuid) {
+              hoverTargetId = target.uuid; hoverStart = performance.now(); cardHoverTicks = 0;
+            } else {
+              const dwell = performance.now() - hoverStart; cardHoverTicks += 1;
+              if (dwell > 700 && cardHoverTicks > 3) {
+                score += 10; streak = Math.min(5, streak + 1);
+                scoreBox.textContent = `स्कोर: ${score}`; streakBox.textContent = `श्रृंखला: x${streak}`;
+                hitVFX(true); playTone(660);
+                scene.remove(target); discs.splice(discs.indexOf(target), 1);
+                showLearn(target.userData.label); spawnBurst(target.position.clone());
+                currentConceptIndex += 1; hoverTargetId = null; hoverStart = 0; cardHoverTicks = 0;
+                if (currentConceptIndex >= levels[levelIndex].concepts.length) { waitingForNext = true; setTimeout(showLevelComplete, 400); }
+                else { ensureDiscs(); }
+              }
+            }
+          } else {
+            hoverTargetId = null; hoverStart = 0; cardHoverTicks = 0;
+          }
+        }
+
+        // MediaPipe Hands setup
+        const hands = new Hands({ locateFile: (file) => `vendor/mediapipe/${file}` });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+
+        let gotFirstResult = false;
+        const setProgress = (percent, text) => { bar.style.width = `${percent}%`; percentLine.textContent = `${percent}%`; if (text) statusLine.textContent = text; };
+
+        const drawLandmarks = (landmarks) => {
+          const w = window.innerWidth; const h = window.innerHeight;
+          landmarksCanvas.width = w; landmarksCanvas.height = h;
+          landmarksCtx.clearRect(0, 0, w, h);
+          const indexTip = landmarks[8]; const indexPip = landmarks[6];
+          const x = (1 - indexTip.x) * w; const y = indexTip.y * h;
+          landmarksCtx.fillStyle = 'rgba(34,211,238,0.9)'; landmarksCtx.beginPath(); landmarksCtx.arc(x, y, 8, 0, Math.PI * 2); landmarksCtx.fill();
+          landmarksCtx.strokeStyle = 'rgba(34,211,238,0.6)'; landmarksCtx.lineWidth = 3; landmarksCtx.beginPath(); landmarksCtx.moveTo((1 - indexPip.x) * w, indexPip.y * h); landmarksCtx.lineTo(x, y); landmarksCtx.stroke();
+        };
+
+        hands.onResults((results) => {
+          try {
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+            if (!gotFirstResult) { gotFirstResult = true; setProgress(100, "तैयार: हाथ पहचाना गया"); overlay.style.display = "none"; }
+            drawLandmarks(results.multiHandLandmarks[0]);
+            const lm = results.multiHandLandmarks[0];
+            const indexTip = lm[8];
+            const x = (indexTip.x - 0.5) * 6.2; const y = (0.5 - indexTip.y) * 4.6;
+            magnetAim(x, y);
+            const screenX = (1 - indexTip.x) * window.innerWidth; const screenY = indexTip.y * window.innerHeight;
+            collectIfHovering(screenX, screenY);
+          } catch (err) { console.warn("Gesture loop error:", err); }
+        });
+
+        const cameraUtils = new Camera(videoElement, { onFrame: async () => {
+            const now = performance.now(); if (now - lastDetectionTime > 33) { lastDetectionTime = now; try { await hands.send({ image: videoElement }); } catch (err) { console.warn("Hands error:", err); } }
+          }, width: 640, height: 480 });
+
+        videoElement.addEventListener('loadeddata', () => {
+          setProgress(45, "चरण 2/3: कैमरा स्ट्रीम सक्रिय");
+          statusText.textContent = "कैमरा तैयार — हाथ दिखाएँ";
+          cameraFeed.srcObject = videoElement.srcObject;
+        });
+
+        async function init() {
+          try {
+            setProgress(15, "चरण 1/3: लोकल AI एसेट्स लोड");
+            debugLine.textContent = "लोकल MediaPipe + Three.js उपयोग हो रहे हैं";
+            statusLine.textContent = "चरण 2/3: कैमरा अनुमति";
+            try { await navigator.mediaDevices.getUserMedia({ video: true }); debugLine.textContent = "कैमरा अनुमति मिली"; } catch (err) { debugLine.textContent = "कैमरा अवरुद्ध — अनुमति देकर पुनः प्रयास करें"; }
+            await cameraUtils.start();
+            preview.srcObject = videoElement.srcObject;
+            setProgress(66, "चरण 3/3: हैंड मॉडल सक्रिय");
+            ensureDiscs();
+            render();
+          } catch (e) {
+            console.error(e);
+            statusText.textContent = "कैमरा विफल — अनुमति दें और रिफ्रेश करें";
+            statusLine.textContent = "यदि रोका, तो अनुमति दें और पुनः प्रयास करें";
+          }
+        }
+
+        function render() {
+          updateDiscs(); updateParticles(); renderer.render(scene, camera); requestAnimationFrame(render);
+        }
+
+        window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); landmarksCanvas.width = innerWidth; landmarksCanvas.height = innerHeight; });
+        retryBtn.addEventListener('click', () => { statusText.textContent = "पुनः प्रयास हो रहा है…"; debugLine.textContent = ""; init(); });
+        nextBtn.addEventListener('click', advanceLevel);
+        updateLevelUI();
+        init();
+      }
+    </script>
+  </body>
+</html>
