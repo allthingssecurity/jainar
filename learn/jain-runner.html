@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="hi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>जैन रनर — Endless Runner (हिन्दी)</title>
+    <style>
+      :root { --bg:#0b1120; --fg:#e5e7eb; --accent:#22d3ee; --accent2:#34d399; --warn:#f59e0b; --err:#ef4444; }
+      html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif; }
+      #root { position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto; }
+      header, footer { padding:8px 12px; background:linear-gradient(180deg, rgba(34,211,238,0.08), transparent); font-size:12px; letter-spacing:0.06em; }
+      header span { opacity:0.85; }
+      #stageWrap { position:relative; display:grid; place-items:center; overflow:hidden; }
+      canvas { background: radial-gradient(circle at 30% 20%, #0f172a 0%, #0b1120 60%); width:100%; height:100%; image-rendering: pixelated; }
+      #hud { position:absolute; top:8px; left:8px; right:8px; display:flex; gap:8px; justify-content:space-between; pointer-events:none; }
+      .pill { background:rgba(2,6,23,0.6); border:1px solid rgba(34,211,238,0.35); padding:6px 10px; border-radius:999px; font-size:12px; }
+      #btnPause { pointer-events:auto; cursor:pointer; }
+      #overlay, #modal { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(2,6,23,0.6); }
+      #overlay.show, #modal.show { display:flex; }
+      .card { width:min(92vw, 520px); background:rgba(7,10,18,0.96); border:1px solid rgba(34,211,238,0.35); border-radius:16px; padding:16px; box-shadow:0 0 40px rgba(34,211,238,0.15); }
+      .card h1 { margin:0 0 8px; font-size:18px; letter-spacing:0.12em; color:var(--accent); text-transform:uppercase; }
+      .card p { margin:6px 0; opacity:0.92; line-height:1.5; font-size:14px; }
+      .row { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:10px; }
+      button { appearance:none; border:none; background:var(--accent); color:#041018; font-weight:700; padding:10px 14px; border-radius:12px; cursor:pointer; }
+      button.ghost { background:transparent; color:var(--fg); border:1px solid rgba(34,211,238,0.35); }
+      .meter { height:6px; background:rgba(255,255,255,0.1); border-radius:999px; overflow:hidden; }
+      .bar { width:0%; height:100%; background:linear-gradient(90deg, var(--accent), #38bdf8); transition:width .2s; }
+      #hint { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); font-size:12px; opacity:0.7; text-align:center; }
+      #toast { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-weight:800; letter-spacing:0.2em; opacity:0; transition:opacity .2s; pointer-events:none; }
+      #toast.show { opacity:1; }
+      .tag { display:inline-block; padding:4px 8px; border-radius:999px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.4); font-size:11px; margin-top:6px; }
+      .small { font-size:12px; opacity:0.8; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <header>
+        <span>जैन रनर • Endless Runner • हिन्दी</span>
+      </header>
+      <div id="stageWrap">
+        <canvas id="stage" width="960" height="540"></canvas>
+        <div id="hud">
+          <div class="pill" id="scoreBox">स्कोर: 0</div>
+          <div style="display:flex; gap:8px;">
+            <div class="pill" id="speedBox">गति: 1.0x</div>
+            <div class="pill" id="levelBox">अध्याय: 1/5</div>
+            <div class="pill" id="btnPause">विराम</div>
+          </div>
+        </div>
+        <div id="overlay" class="show">
+          <div class="card">
+            <h1>जैन रनर — शुरुआत</h1>
+            <p>उद्देश्य: बाधाओं से बचें, ज्ञान‑कार्ड (📜) और रत्न (💎) संग्रह करें।
+            प्रत्येक ज्ञान‑कार्ड जैन दर्शन का एक संक्षिप्त बिंदु खोलता है।</p>
+            <p class="small">कंट्रोल: स्पेस/↑ कूद, ↓ स्लाइड, टैप = कूद, स्वाइप‑डाउन = स्लाइड।
+            ध्वनि के लिए “शुरू” दबाने के बाद ही ऑडियो चलेगा।</p>
+            <div class="row">
+              <button id="btnStart">शुरू करें</button>
+              <button class="ghost" id="btnMute">ध्वनि बंद</button>
+            </div>
+          </div>
+        </div>
+        <div id="modal">
+          <div class="card">
+            <h1 id="cardTitle">विषय</h1>
+            <p id="cardBody">विवरण</p>
+            <div id="cardTake" class="tag">सार</div>
+            <div class="row">
+              <button id="btnResume">आगे बढ़ें</button>
+            </div>
+          </div>
+        </div>
+        <div id="hint">घुमाएँ: ⬅️/A • ➡️/D • मोबाइल: बायाँ/दायाँ टैप</div>
+        <div id="btnL" style="position:absolute;left:10px;bottom:12px;background:rgba(2,6,23,0.6);border:1px solid rgba(34,211,238,0.35);padding:10px 14px;border-radius:12px;cursor:pointer;">⟲</div>
+        <div id="btnR" style="position:absolute;right:10px;bottom:12px;background:rgba(2,6,23,0.6);border:1px solid rgba(34,211,238,0.35);padding:10px 14px;border-radius:12px;cursor:pointer;">⟳</div>
+        <div id="toast"></div>
+      </div>
+      <!-- Lesson side panel -->
+      <div id="lessonPanel" style="position:fixed; right:16px; top:72px; width:320px; z-index:9; background:rgba(2,6,23,0.9); border:1px solid rgba(34,211,238,0.35); border-radius:14px; padding:12px 14px; box-shadow:0 0 24px rgba(34,211,238,0.15); display:none;">
+        <div id="lpTitle" style="font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:#22d3ee;">विषय</div>
+        <div id="lpBody" style="margin-top:6px; font-size:13px; line-height:1.45; white-space:pre-wrap; color:#e5e7eb;">विवरण</div>
+        <div id="lpTake" style="margin-top:8px; font-size:12px; color:#cbd5f5;">सार</div>
+      </div>
+      <footer>
+        <span>शिक्षामूलक: अंग आगम, उपांग, चेद, मूल, प्रकिर्णक — कार्ड्स द्वारा</span>
+      </footer>
+    </div>
+
+    <script>
+      // ज्ञान कार्ड (हिन्दी) — 3–4 पंक्तियाँ प्रति विषय
+      const JAIN_CARDS = {
+        "अंग आगम क्या हैं": { body: "सबसे प्राचीन और प्रामाणिक जैन उपदेश।\nमहावीर के प्रत्यक्ष प्रवचन का मूल संकलन।\nपरंपरा: 12 अंग; श्वेतांबर में 11 शेष, दृष्टिवाद लुप्त।\nजीवन‑विधान, बंधन और मुक्ति पर सीधा प्रकाश।", takeaway: "अंग = मूल आधार और दिशा।" },
+        "आचारांग सूत्र": { body: "अहिंसा, अपरिग्रह और सतत सजगता का ग्रंथ।\nहिंसा का निर्धारण इरादा और असावधानी से भी।\nप्रतिपल जागरूकता से कर्म‑बंधन घटता है।\nजीवन‑शैली ही मुक्ति‑साधना बनती है।", takeaway: "आचरण = मुक्ति की अभियांत्रिकी।" },
+        "सूत्रकृतांग": { body: "बहु‑दृष्टि (अनैकांत) का शुरुआती सूत्रीकरण।\nअतिवादी, एकांगी मतों की समालोचना।\nसत्य सापेक्ष, पर नियमबद्ध और सुसंगत।\nवाद‑संवाद का संस्कार स्थापित करता है।", takeaway: "अनैकांत = बहु‑कोणीय सत्य।" },
+        "दृष्टिवाद (लुप्त)": { body: "तर्क, कर्म‑तत्त्व और प्रमाणशास्त्र का स्रोत‑ग्रंथ।\nयद्यपि लुप्त, परवर्ती दर्शन पर गहरा प्रभाव।\nअनुमान, दृष्टि और ज्ञान‑सीमाओं की मीमांसा।", takeaway: "लुप्त, पर प्रभावी आधार।" },
+        "भगवती सूत्र": { body: "वृहद प्रश्न‑उत्तर: जीव‑अजीव, काल, आकाश, कर्म।\nप्रयत्न बनाम नियतत्व—नियमों में स्थित स्वतंत्रता।\nज्ञान परिप्रेक्ष्य‑निर्भर पर नियम‑संगत।\nदैनिक उदाहरणों से दर्शन जीवित रहता है।", takeaway: "नियम + परिप्रेक्ष्य = व्यवहारिक ज्ञान।" },
+        "जम्बूद्वीप प्रज्ञप्ति": { body: "मध्यलोक का मानचित्र, महाद्वीप‑समुद्र, मानव क्षेत्र।\nकाल‑चक्र में सभ्यताओं का उत्थान‑पतन।\nमुक्ति दुर्लभ—समय‑भूगोल का संदर्भ महत्त्वपूर्ण।", takeaway: "ब्रह्मांड‑संरचना में साधना।" },
+        "सूर्य/चन्द्र प्रज्ञप्ति": { body: "सौर‑चन्द्र गति, काल‑मापन और पंचांग।\nकाल वास्तविक—कर्म unfold समय‑संरचना में।\nसमय‑अनुशासन साधना को स्थिर करता है।", takeaway: "काल = वास्तविक अनुशासन।" },
+        "दशाश्रुतस्कंध": { body: "दोष‑गौरव, श्रेणी और संगत प्रायश्चित्त।\nभाव (आंतरिक) बनाम द्रव्य (बाह्य) का भेद।\nदंड नहीं—दुरुस्ती और शुद्धि का साधन।", takeaway: "ग्रेडेड नैतिकता, त्वरित दुरुस्ती।" },
+        "निशीथ सूत्र": { body: "कठोरतम प्रायश्चित्त का विधान।\nतप = कर्म‑द्रव्य पर उष्मा जैसा प्रभाव।\nशिथिलता नहीं—सटीक अनुशासन।", takeaway: "तप = कर्म‑शोधन की क्रिया।" },
+        "उत्तराध्ययन": { body: "ज्ञान × अनुशासन = समेकित साधना।\nनश्वरता, संयम, कर्म‑बंधन/शेध का विवेचन।\nगृहस्थ‑संयमी भेद और मार्गदर्शन।", takeaway: "सोच और जीवन का एकत्व।" },
+        "दशवैकालिक": { body: "दैनिक अनुशासन का संक्षेप: पंचव्रत, वाणी‑संयम, सावधानी।\nहिंसा की जड़ असावधानी; असावधानी की जड़ आसक्ति।\nदैनिक अभ्यास = दार्शनिक साधना।", takeaway: "रोजमर्रा में साधना।" },
+        "आवश्यक": { body: "समायिक, स्तुति, प्रतिक्रमण, आलोचना, कायोत्सर्ग, प्रार्थना।\nविधि = ध्यान‑इंजीनियरिंग और पुनर्संतुलन।\nआवृत्ति से चित्त‑स्वच्छता।", takeaway: "विधि‑पूर्वक ध्यान।" },
+        "भक्त परिज्ञा": { body: "आहार‑मर्यादा, सूक्ष्म हिंसा और संयम।\nअपरिहार्य हिंसा को भी न्यूनतम करना।\nजागरूकता = नैतिक अनुकूलन।", takeaway: "न्यून‑हिंसा का अभ्यास।" },
+        "आतुर प्रत्याख्यान": { body: "मरण‑क्षण की चित्त‑अवस्था निर्णायक।\nअंतिम भाव = अंतिम कर्म‑आवेश।\nसमता मृत्यु को संज्ञान‑घटना बनाती है।", takeaway: "अंतिम क्षण की सजगता।" },
+        "प्रकिर्णक: चौःशरण": { body: "तीर्थंकर, सिद्ध, धर्म, संघ में शरण।\nशरण = अनुग्रह नहीं, कारण‑संगत संरेखण।\nसमाधान पाए हुए जनों से समंजन।", takeaway: "शरण = सही संरेखण।" }
+      };
+
+      // -------- Canvas + Game Core (Top-fall + Rotate Obstacles) --------
+      const W = 960, H = 540;
+      const canvas = document.getElementById('stage');
+      const ctx = canvas.getContext('2d');
+      let running = false, paused = false, firstInteract = false;
+      let time = 0, dt = 0, last = 0;
+      let score = 0, high = +(localStorage.getItem('jain_runner_high')||0);
+      let fallSpeed = 1.0; // slower base pace for learning
+      let combo = 0;
+      let lives = 5;
+      let currentLesson = '';
+      let lastLearnedTitle = '';
+
+      const scoreBox = document.getElementById('scoreBox');
+      const speedBox = document.getElementById('speedBox');
+      const levelBox = document.getElementById('levelBox');
+      const overlay = document.getElementById('overlay');
+      const modal = document.getElementById('modal');
+      const toast = document.getElementById('toast');
+      const btnStart = document.getElementById('btnStart');
+      const btnPause = document.getElementById('btnPause');
+      const btnMute = document.getElementById('btnMute');
+      const btnResume = document.getElementById('btnResume');
+      const cardTitle = document.getElementById('cardTitle');
+      const cardBody = document.getElementById('cardBody');
+      const cardTake = document.getElementById('cardTake');
+      const lessonPanel = document.getElementById('lessonPanel');
+      const lpTitle = document.getElementById('lpTitle');
+      const lpBody = document.getElementById('lpBody');
+      const lpTake = document.getElementById('lpTake');
+
+      // Levels (5 chapters)
+      const CHAPTERS = [
+        { name: 'अंग आगम', color:'#22d3ee' },
+        { name: 'उपांग', color:'#34d399' },
+        { name: 'चेद सूत्र', color:'#f59e0b' },
+        { name: 'मूल सूत्र', color:'#a78bfa' },
+        { name: 'प्रकिर्णक', color:'#fb7185' }
+      ];
+      function chapterForScore(s){
+        if (s < 5) return 0; if (s<10) return 1; if (s<15) return 2; if (s<20) return 3; return 4;
+      }
+
+      // Input (rotate left/right)
+      let keys = new Set();
+      window.addEventListener('keydown', e=>{ keys.add(e.key); if (e.key.startsWith('Arrow')) e.preventDefault(); });
+      window.addEventListener('keyup', e=>keys.delete(e.key));
+      canvas.addEventListener('touchstart', (e)=>{
+        const x = e.touches[0].clientX;
+        if (x < window.innerWidth/2) rotateActive(-1); else rotateActive(1);
+      });
+
+      // Entities
+      class Player {
+        constructor(){ this.x=W/2; this.y=H-100; this.w=48; this.h=64; this.inv=0; }
+        rect(){ return {x:this.x-18, y:this.y-10, width:this.w-10, height:this.h-20}; }
+        update(){ if (this.inv>0) this.inv--; }
+        draw(){
+          // Runner animation standing run
+          ctx.save(); ctx.translate(this.x, this.y);
+          // Shadow
+          ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, this.h/2+16, 26, 8, 0, 0, Math.PI*2, false); ctx.fill();
+          // Body
+          ctx.fillStyle = this.inv%6<3? '#22d3ee' : '#38bdf8';
+          ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+          // Head
+          ctx.fillStyle='#e5e7eb'; ctx.beginPath(); ctx.arc(0, -this.h/2-10, 14, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Gate obstacle: rotate the bar vertical to clear
+      class GateObstacle {
+        constructor(){
+          this.requiredSide = Math.random()<0.5 ? -1 : 1; // force alternation of keys over time
+          this.cx = W/2 + this.requiredSide * 70; // spawn biased to a side
+          this.cy=-60; this.w=240; this.h=20;
+          this.angle=0; // start perfectly blocking road
+          this.processed=false;
+          this.fallingSide=0; // -1 left, +1 right
+          this.slide=0; // horizontal slide speed when fallingSide engaged
+          this.lastDir=0;
+        }
+        update(){
+          this.cy += fallSpeed;
+          // slide only after commit; gentle acceleration
+          if (this.fallingSide!==0) {
+            this.cx += this.fallingSide * this.slide;
+            this.slide *= 1.02;
+          }
+        }
+        rotate(dir){
+          this.angle += dir*0.22; this.lastDir = dir;
+          // lock in fall direction only if rotated toward required side
+          if (this.fallingSide===0 && Math.abs(this.angle) > 0.6 && (dir === this.requiredSide)) {
+            this.fallingSide = this.requiredSide;
+            this.slide = 3.2;
+          }
+          // small damping back toward flat if rotating the wrong way to discourage holding one key forever
+          if (this.fallingSide===0 && dir !== this.requiredSide) {
+            this.angle *= 0.9;
+          }
+        }
+        draw(){
+          ctx.save(); ctx.translate(this.cx,this.cy); ctx.rotate(this.angle);
+          // trunk (bar across road)
+          ctx.fillStyle='#6b4f1d';
+          ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);
+          ctx.fillStyle='#4a3b18'; for(let i=-this.w/2;i<this.w/2;i+=18){ ctx.fillRect(i,-this.h/2,4,this.h); }
+          // foliage cluster on top side to feel like a tree
+          ctx.fillStyle='#166534';
+          for (let i=0;i<5;i++) { const rx = -this.w/4 + i*(this.w/8); ctx.beginPath(); ctx.arc(rx, -this.h/2-16, 12 + (i%2?3:0), 0, Math.PI*2); ctx.fill(); }
+          ctx.restore();
+        }
+      }
+
+      const player = new Player();
+      const rings = [];
+      const gates = [];
+
+      // Extra obstacle types for variety
+      class VineObstacle extends GateObstacle {
+        constructor(){ super(); this.w = 200; this.h = 14; }
+        draw(){ ctx.save(); ctx.translate(this.cx,this.cy); ctx.rotate(this.angle); ctx.fillStyle='#065f46'; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); ctx.fillStyle='#047857'; for(let i=-this.w/2;i<this.w/2;i+=22){ ctx.fillRect(i,-this.h/2,3,this.h);} ctx.restore(); }
+      }
+      class BoulderObstacle extends GateObstacle {
+        constructor(){ super(); this.w = 90; this.h = 90; }
+        rotate(dir){ this.angle += dir*0.24; if (this.fallingSide===0 && Math.abs(this.angle)>0.5){ this.fallingSide = dir<0?-1:1; this.slide = 3.0; } }
+        draw(){ ctx.save(); ctx.translate(this.cx,this.cy); ctx.fillStyle='#374151'; ctx.beginPath(); ctx.arc(0,0, 38, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#1f2937'; for(let i=0;i<6;i++){ ctx.beginPath(); ctx.arc((i*9)%20-10, (i*7)%16-8, 3, 0, Math.PI*2); ctx.fill(); } ctx.restore(); }
+      }
+
+      // Spawner (slow and fair)
+      let spawnTick = 0;
+      function spawn(){
+        spawnTick--;
+        if (spawnTick<=0){
+          const r = Math.random();
+          if (r < 0.5) gates.push(new GateObstacle());
+          else if (r < 0.8) gates.push(new VineObstacle());
+          else gates.push(new BoulderObstacle());
+          spawnTick = 180; // slower cadence
+        }
+      }
+
+      // Simple camera shake
+      let shakeT = 0; function shake(){ shakeT = 10; }
+
+      // Audio (WebAudio procedural). Starts on first interaction.
+      let AC=null, master=null, muted=false;
+      function initAudio(){ if(AC) return; try{ AC=new (window.AudioContext||window.webkitAudioContext)(); master=AC.createGain(); master.gain.value=0.15; master.connect(AC.destination);}catch{} }
+      function bleep(f=440, t=0.08, type='sine', v=0.2){ if(!AC||muted) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type=type; o.frequency.value=f; g.gain.value=v; o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+t); }
+      function play(name){
+        if(!AC||muted) return;
+        if(name==='jump') bleep(660,0.08,'sine',0.12);
+        if(name==='slide') bleep(330,0.06,'triangle',0.09);
+        if(name==='coin') { bleep(880,0.06,'sine',0.15); setTimeout(()=>bleep(1320,0.05,'sine',0.12),40); }
+        if(name==='card') { bleep(520,0.12,'sawtooth',0.12); }
+        if(name==='hit') { bleep(160,0.2,'square',0.18); }
+      }
+      // simple background pulse
+      let musicI=0; function tickMusic(){ if(!AC||muted) return; if(Math.random()<0.03) bleep(220+Math.random()*40,0.1,'triangle',0.05); if(++musicI%32===0) bleep(110,0.05,'square',0.04); }
+
+      // UI helpers
+      function showToast(t){ toast.textContent=t; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 400); }
+      function showCard(key){ const data=JAIN_CARDS[key]; if(!data) return; cardTitle.textContent=key; cardBody.textContent=data.body; cardTake.textContent = 'सार: ' + (data.takeaway||''); modal.classList.add('show'); paused=true; }
+      function showLessonPanel(key){ const data = JAIN_CARDS[key]; if(!data) return; lpTitle.textContent = key; lpBody.textContent = data.body; lpTake.textContent = data.takeaway ? ('सार: ' + data.takeaway) : ''; lessonPanel.style.display = 'block'; }
+
+      // Lessons sequence
+      const lessonKeys = Object.keys(JAIN_CARDS);
+      let lessonIndex = 0;
+      function nextLesson(){ currentLesson = lessonKeys[lessonIndex % lessonKeys.length]; lessonIndex++; }
+
+      // Rotate active (nearest to player by vertical distance)
+      function rotateActive(dir){
+        if (!gates.length) return;
+        let idx = 0; let best = Infinity;
+        for (let i=0;i<gates.length;i++){
+          const d = Math.abs(gates[i].cy - player.y);
+          if (d < best) { best = d; idx = i; }
+        }
+        gates[idx].rotate(dir);
+      }
+
+      // Game loop
+      function loop(ts){ if(!running){ last=ts; requestAnimationFrame(loop); return; } dt = (ts-last)/16.67; if(dt>2) dt=1; last=ts; time+=dt;
+        if (!paused){ update(); draw(); }
+        requestAnimationFrame(loop);
+      }
+
+      function update(){
+        // keep pace slow; gentle ramp for readability
+        fallSpeed = 1.0 + Math.min(0.6, score*0.008);
+        scoreBox.textContent = `जीवन: ${lives} • पाठ: ${Math.min(score, 9999)}`;
+        const ch = chapterForScore(score); levelBox.textContent = `अध्याय: ${ch+1}/5 • ${CHAPTERS[ch].name}`;
+        speedBox.textContent = `गति: ${(fallSpeed/1.0).toFixed(1)}x`;
+
+        player.update();
+
+        // rotate via keyboard
+        if (keys.has('ArrowLeft') || keys.has('Left') || keys.has('a') || keys.has('A')) rotateActive(-1);
+        if (keys.has('ArrowRight') || keys.has('Right') || keys.has('d') || keys.has('D')) rotateActive(1);
+
+        const ROAD_L = W/2 - 140, ROAD_R = W/2 + 140;
+        for (let i=gates.length-1;i>=0;i--){ const g=gates[i]; g.update(); if (g.cy > H+120) gates.splice(i,1); }
+
+        // Pass/fail when gate crosses the player's Y: success if gate slid outside road
+        for (let i=0;i<gates.length;i++){
+          const g = gates[i];
+          if (!g.processed && g.cy >= player.y){
+            g.processed = true;
+            if (g.cx < ROAD_L || g.cx > ROAD_R){
+              score += 1; combo = Math.min(9, combo+1); play('coin'); showToast('सफल');
+              // Show lesson (current) on side panel, then prepare next
+              lastLearnedTitle = currentLesson;
+              if (lastLearnedTitle) showLessonPanel(lastLearnedTitle);
+              nextLesson();
+            } else {
+              lives -= 1; combo = 0; player.inv = 40; play('hit'); shake(); showToast('टकराव');
+              if (lives <= 0){ paused = true; overlay.classList.add('show'); document.querySelector('#overlay h1').textContent = 'खेल समाप्त'; document.querySelector('#overlay p').textContent = 'पुनः आरंभ करें — “शुरू करें”'; score = 0; lives = 5; lessonIndex = 0; currentLesson=''; gates.length=0; }
+            }
+          }
+        }
+
+        spawn(); tickMusic(); if (shakeT>0) shakeT--; 
+      }
+
+      function draw(){
+        // camera shake
+        const dx = shakeT>0? (Math.random()*2-1)*3 : 0;
+        const dy = shakeT>0? (Math.random()*2-1)*3 : 0;
+        ctx.save(); ctx.translate(dx,dy);
+        // sky
+        ctx.clearRect(-10,-10,W+20,H+20);
+        // parallax
+        const ch = chapterForScore(score); const tint = CHAPTERS[ch].color;
+        // far
+        ctx.fillStyle = '#0a0f1f'; ctx.fillRect(0,0,W,H);
+        // mountains/trees silhouettes
+        ctx.fillStyle = '#0e1a33'; for(let i=0;i<8;i++){ const bx=(time*fallSpeed*0.6 + i*160)% (W+200); ctx.beginPath(); ctx.moveTo(W-bx, H-220); ctx.lineTo(W-bx+120,H-220); ctx.lineTo(W-bx+60,H-300-40*Math.sin(i)); ctx.closePath(); ctx.fill(); }
+        // mid trees
+        ctx.fillStyle = '#0f2a3a'; for(let i=0;i<12;i++){ const x=(time*fallSpeed*1.2 + i*120)%(W+150); const tx=W-x; ctx.fillRect(tx, H-260, 8, 120); ctx.beginPath(); ctx.arc(tx+4, H-260, 24, 0, Math.PI*2); ctx.fill(); }
+        // ground
+        ctx.fillStyle = '#052e2b'; ctx.fillRect(0,H-88, W, 88);
+        // lane markings
+        ctx.strokeStyle = tint; ctx.globalAlpha=0.2; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(0,H-120-i*70); ctx.lineTo(W,H-120-i*70); ctx.stroke(); } ctx.globalAlpha=1;
+
+        // entities
+        // vertical road
+        ctx.fillStyle='#0b1f2e'; ctx.fillRect(W/2-140, 0, 280, H);
+        for (const g of gates) g.draw();
+        player.draw();
+
+        // UI on canvas — show last learned lesson title in banner
+        if (lastLearnedTitle){
+          ctx.fillStyle='rgba(2,6,23,0.7)'; ctx.fillRect(W/2-220, 18, 440, 44);
+          ctx.strokeStyle='rgba(34,211,238,0.35)'; ctx.strokeRect(W/2-220, 18, 440, 44);
+          ctx.fillStyle='#e5e7eb'; ctx.font='16px system-ui'; ctx.textAlign='center';
+          ctx.fillText(`पाठ: ${lastLearnedTitle}`, W/2, 46);
+        }
+        ctx.restore();
+      }
+
+      // Controls
+      btnStart.addEventListener('click', async ()=>{
+        overlay.classList.remove('show');
+        running=true; paused=false;
+        // Spawn an initial obstacle close enough to see immediately
+        const g = new GateObstacle(); g.cy = -40; gates.push(g); spawnTick = 150;
+        if(!firstInteract){ firstInteract=true; initAudio(); try{ await AC.resume(); }catch{} }
+      });
+      // On-screen rotate buttons
+      const btnL = document.getElementById('btnL');
+      const btnR = document.getElementById('btnR');
+      btnL.addEventListener('click', ()=>rotateActive(-1));
+      btnR.addEventListener('click', ()=>rotateActive(1));
+      btnPause.addEventListener('click', ()=>{ if(!running) return; paused=!paused; showToast(paused? 'विराम':'जारी'); });
+      btnResume.addEventListener('click', ()=>{ modal.classList.remove('show'); paused=false; });
+      btnMute.addEventListener('click', ()=>{ muted=!muted; btnMute.textContent = muted? 'ध्वनि चालू':'ध्वनि बंद'; });
+
+      // Initialize first lesson right away
+      nextLesson();
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+  </html>
