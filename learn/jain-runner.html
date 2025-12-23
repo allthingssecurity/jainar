@@ -70,7 +70,7 @@
             </div>
           </div>
         </div>
-        <div id="hint">घुमाएँ: ⬅️/A • ➡️/D • मोबाइल: बायाँ/दायाँ टैप</div>
+        <div id="hint">स्वाइप बाएँ/दाएँ (मोबाइल) • Drag left/right (desktop) • या ⬅️/A / ➡️/D</div>
         <div id="btnL" style="position:absolute;left:10px;bottom:12px;background:rgba(2,6,23,0.6);border:1px solid rgba(34,211,238,0.35);padding:10px 14px;border-radius:12px;cursor:pointer;">⟲</div>
         <div id="btnR" style="position:absolute;right:10px;bottom:12px;background:rgba(2,6,23,0.6);border:1px solid rgba(34,211,238,0.35);padding:10px 14px;border-radius:12px;cursor:pointer;">⟳</div>
         <div id="toast"></div>
@@ -153,10 +153,33 @@
       let keys = new Set();
       window.addEventListener('keydown', e=>{ keys.add(e.key); if (e.key.startsWith('Arrow')) e.preventDefault(); });
       window.addEventListener('keyup', e=>keys.delete(e.key));
-      canvas.addEventListener('touchstart', (e)=>{
-        const x = e.touches[0].clientX;
-        if (x < window.innerWidth/2) rotateActive(-1); else rotateActive(1);
-      });
+
+      // Swipe/drag rotate support (mobile + desktop)
+      const drag = { active:false, lastX:0 };
+      const dragStart = (x)=>{ drag.active=true; drag.lastX=x; };
+      const dragMove = (x)=>{
+        if (!drag.active) return;
+        const dx = x - drag.lastX;
+        const stepPx = 6; // smaller threshold → smoother control
+        let steps = Math.floor(Math.abs(dx) / stepPx);
+        if (steps > 0) {
+          const dir = dx > 0 ? 1 : -1;
+          if (steps > 12) steps = 12; // cap per event
+          for (let i=0;i<steps;i++) rotateActive(dir);
+          drag.lastX += dir * steps * stepPx;
+        }
+      };
+      const dragEnd = ()=>{ drag.active=false; };
+
+      // Touch events
+      canvas.addEventListener('touchstart', (e)=>{ if (e.touches && e.touches[0]) { e.preventDefault(); dragStart(e.touches[0].clientX); } }, { passive:false });
+      canvas.addEventListener('touchmove', (e)=>{ if (e.touches && e.touches[0]) { e.preventDefault(); dragMove(e.touches[0].clientX); } }, { passive:false });
+      canvas.addEventListener('touchend', (e)=>{ e.preventDefault(); dragEnd(); }, { passive:false });
+
+      // Mouse drag (desktop)
+      canvas.addEventListener('mousedown', (e)=>{ e.preventDefault(); dragStart(e.clientX); });
+      window.addEventListener('mousemove', (e)=>{ dragMove(e.clientX); });
+      window.addEventListener('mouseup', ()=> dragEnd());
 
       // Entities
       class Player {
@@ -198,9 +221,9 @@
           }
         }
         rotate(dir){
-          this.angle += dir*0.22; this.lastDir = dir;
+          this.angle += dir*0.26; this.lastDir = dir;
           // lock in fall direction only if rotated toward required side
-          if (this.fallingSide===0 && Math.abs(this.angle) > 0.6 && (dir === this.requiredSide)) {
+          if (this.fallingSide===0 && Math.abs(this.angle) > 0.4 && (dir === this.requiredSide)) {
             this.fallingSide = this.requiredSide;
             this.slide = 3.2;
           }
